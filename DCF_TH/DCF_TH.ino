@@ -1,6 +1,7 @@
 // DCF_TH
-// Displays time and date from DCF signal and temperature and humidity (DHT22 / AM2302)
-// on a 16x02 character LCD display via I2C
+// Displays time and date from DCF signal 
+// and temperature and humidity from a DHT22 / AM2302 sensor
+// on a 16x02 character LCD via I2C
 
 // Arduino Pro Mini
 // ATmega328P 5V
