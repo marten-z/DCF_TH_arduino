@@ -63,8 +63,6 @@ void printTemp(float t) {
   }
   lcd.setCursor(10,0);
   lcd.print(str);
-  lcd.printByte(0xDF); 
-  lcd.print("C");
 }
 
 
@@ -77,5 +75,4 @@ void printHumidity(float h) {
   }
   lcd.setCursor(11,1);
   lcd.print(str);
-  lcd.print("%");
 }
