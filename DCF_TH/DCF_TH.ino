@@ -24,7 +24,7 @@ void setup()
   // Print a message to the LCD.
   lcd.backlight();
   lcd.setCursor(0,0);
-  lcd.print("19:49:21    20"); lcd.printByte(176); lcd.print("C");
+  lcd.print("19:49:21    20"); lcd.printByte(0xDF); lcd.print("C");
   lcd.setCursor(0,1);
   lcd.print("2019-04-19   80%");
 }
