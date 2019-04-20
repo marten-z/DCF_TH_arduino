@@ -1,0 +1,13 @@
+libraries/Adafruit_Circuit_Playground/
+libraries/Bridge/
+libraries/Ethernet/
+libraries/Firmata/
+libraries/Keyboard/
+libraries/LiquidCrystal/
+libraries/Robot_Control/
+libraries/Robot_IR_Remote/
+libraries/Robot_Motor/
+libraries/SD/
+libraries/Servo/
+libraries/Temboo/
+libraries/readme.txt
