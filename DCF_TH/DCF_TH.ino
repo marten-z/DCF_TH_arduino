@@ -10,12 +10,22 @@
 
 #include "DHT.h"
 #include <LiquidCrystal_I2C.h>
+#include <dcf77.h>
 
 #define DHTPIN 10       // Pin where the DHT sensor is connected to
 #define DHTTYPE DHT22   // DHT22 (AM2302)
 
 DHT dht(DHTPIN, DHTTYPE);
 LiquidCrystal_I2C lcd(0x27, 16, 2);
+const uint8_t dhtDelayInSeconds = 5;
+
+
+// Pins and settings for DCF module
+const uint8_t dcf77_sample_pin = 9;
+const uint8_t dcf77_inverted_samples = 0;
+//const uint8_t dcf77_pin_mode = INPUT;  // disable internal pull up
+const uint8_t dcf77_pin_mode = INPUT_PULLUP;  // enable internal pull up
+const uint8_t dcf77_monitor_led = 13;  // A4 == d18
 
 
 #if defined(ARDUINO) && ARDUINO >= 100
@@ -27,35 +37,161 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 void setup()
 {
+  pinMode(dcf77_monitor_led, OUTPUT);
+  pinMode(dcf77_sample_pin, dcf77_pin_mode);
+  
+  using namespace Clock;
+  
   Serial.begin(9600);
   lcd.init();
   dht.begin();
 
   lcd.backlight();
   lcd.setCursor(0,0);
-  lcd.print("xx:xx:xx  xx.x"); lcd.printByte(0xDF); lcd.print("C");
+  lcd.print("DCF init");
   lcd.setCursor(0,1);
-  lcd.print("xxxx-xx-xx xx.x%");
+  lcd.print("DCF state");
+
+  serialPrintDcfSetupInfo();
+
+  DCF77_Clock::setup();
+  DCF77_Clock::set_input_provider(dcf_sample_input_pin);
+
+  readAndPrintDht();
+
+  // Wait till clock is synced, depending on the signal quality this may take
+  // rather long. About 5 minutes with a good signal, 30 minutes or longer
+  // with a bad signal
+  for (uint8_t state = Clock::useless;
+    state == Clock::useless || state == Clock::dirty;
+    state = DCF77_Clock::get_clock_state()) {
+
+    // wait for next sec
+    Clock::time_t now;
+    DCF77_Clock::get_current_time(now);
+
+    // render one dot per second while initializing
+    static uint8_t count = 0;
+    sprint('.');
+    ++count;
+
+    char * stateValue = clockStateEnumValue(state);
+    lcdPrintDate(stateValue);
+    
+    if (count == 60) {
+      count = 0;
+      readAndPrintDht();
+      sprintln();
+    }
+  }
 }
 
 
 void loop()
 {
-  // Wait a few seconds between measurements.
-  delay(2000);
+  Clock::time_t now;
 
+  DCF77_Clock::get_current_time(now);
+  if (now.month.val > 0) {
+    switch (DCF77_Clock::get_clock_state()) {
+      case Clock::useless: sprint(F("useless ")); break;
+      case Clock::dirty:   sprint(F("dirty:  ")); break;
+      case Clock::synced:  sprint(F("synced: ")); break;
+      case Clock::locked:  sprint(F("locked: ")); break;
+    }
+    lcdPrintDateTime(now);
+    dcfSerialPrint(now);
+  }
+    
+  static uint8_t count = 0;
+  ++count;
+  
+  // Wait a few seconds between measurements.
+  if (count >= dhtDelayInSeconds) {    
+    count = 0;    
+    readAndPrintDht();
+  }
+}
+
+
+uint8_t dcf_sample_input_pin() {
+  const uint8_t sampled_data = dcf77_inverted_samples ^ digitalRead(dcf77_sample_pin);
+
+  digitalWrite(dcf77_monitor_led, sampled_data);
+  return sampled_data;
+}
+
+void serialPrintDcfSetupInfo() {
+  sprintln();
+  sprintln(F("Simple DCF77 Clock V3.1.1"));
+  sprintln(F("(c) Udo Klein 2016"));
+  sprintln(F("www.blinkenlight.net"));
+  sprintln();
+  sprint(F("Sample Pin:      ")); sprintln(dcf77_sample_pin);
+  sprint(F("Sample Pin Mode: ")); sprintln(dcf77_pin_mode);
+  sprint(F("Inverted Mode:   ")); sprintln(dcf77_inverted_samples);
+  sprint(F("Monitor Pin:     ")); sprintln(dcf77_monitor_led);
+  sprintln();
+  sprintln();
+  sprintln(F("Initializing..."));
+}
+
+void lcdPrintDateTime(Clock::time_t now) {
+  char time[8] = {
+    now.hour.digit.hi,
+    now.hour.digit.lo,
+    ':',
+    now.minute.digit.hi,
+    now.minute.digit.lo,
+    ':',
+    now.second.digit.hi,
+    now.second.digit.lo
+  };
+  lcdPrintTime(time);
+
+  char date[10] = {
+    '2',
+    '0',
+    now.year.digit.hi,
+    now.year.digit.lo,
+    '-',
+    now.month.digit.hi,
+    now.month.digit.lo,
+    '-',
+    now.day.digit.hi,
+    now.day.digit.lo
+  };
+  lcdPrintDate(date);  
+}
+
+void lcdPrintTime(char str) {
+  size_t prevlen = strlen(str);
+  memset(str + prevlen, ' ', 7 - prevlen);
+  
+  lcd.setCursor(0,0);
+  lcd.print(str);
+}
+
+void lcdPrintDate(char * str) {
+  size_t prevlen = strlen(str);
+  memset(str + prevlen, ' ', 9 - prevlen);
+  
+  lcd.setCursor(0,1);
+  lcd.print(str);
+}
+
+void readAndPrintDht() {
   // Reading temperature or humidity takes about 250 milliseconds!
   // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
   float h = dht.readHumidity();
   // Read temperature as Celsius
   float t = dht.readTemperature();
 
-  printTemp(t);
-  printHumidity(h);
+  lcdPrintTemp(t);
+  lcdPrintHumidity(h);
 }
 
-
-void printTemp(float t) {
+void lcdPrintTemp(float t) {
   char str[4];
   if (isnan(t)) {
     strcat(str, " ERR");
@@ -63,11 +199,10 @@ void printTemp(float t) {
     dtostrf(t, 4, 1, str);
   }
   lcd.setCursor(10,0);
-  lcd.print(str);
+  lcd.print(str); lcd.printByte(0xDF); lcd.print('C');
 }
 
-
-void printHumidity(float h) {
+void lcdPrintHumidity(float h) {
   char str[4];
   if (isnan(h)) {
     strcat(str, " ERR");
@@ -75,5 +210,58 @@ void printHumidity(float h) {
     dtostrf(h, 4, 1, str);
   }
   lcd.setCursor(11,1);
-  lcd.print(str);
+  lcd.print(str); lcd.print('%');
+}
+
+char * clockStateEnumValue(Clock::clock_state_t state) {
+  char * buf = (char *) malloc (8);
+  
+  switch (state) {
+      case Clock::useless:  // 0, waiting for good enough signal
+        strcpy(buf, "useless");
+        break;
+      case Clock::dirty:    // 1, time data available but unreliable
+        strcpy(buf, "dirty");
+        break;
+      case Clock::free:     // 2, clock was once synced but now may deviate more than 200 ms, must not re-lock if valid phase is detected
+        strcpy(buf, "free");
+        break;
+      case Clock::unlocked: // 3, lock was once synced, inaccuracy below 200 ms, may re-lock if a valid phase is detected
+        strcpy(buf, "unlocked");
+        break;
+      case Clock::locked:   // 4, clock driven by accurate phase, time is accurate but not all decoder stages have sufficient quality for sync
+        strcpy(buf, "locked");
+        break;
+      case Clock::synced:   // 5, best possible quality, clock is 100% synced
+        strcpy(buf, "synced");
+        break;
+   }
+   return buf;
+}
+
+void dcfSerialPrint(Clock::time_t now) {
+  sprint(' ');
+
+  sprint(F("20"));
+  paddedPrint(now.year);
+  sprint('-');
+  paddedPrint(now.month);
+  sprint('-');
+  paddedPrint(now.day);
+  sprint(' ');
+
+  paddedPrint(now.hour);
+  sprint(':');
+  paddedPrint(now.minute);
+  sprint(':');
+  paddedPrint(now.second);
+
+  sprint("+0");
+  sprint(now.uses_summertime? '2': '1');
+  sprintln();
+}
+
+void paddedPrint(BCD::bcd_t n) {
+  sprint(n.digit.hi);
+  sprint(n.digit.lo);
 }
