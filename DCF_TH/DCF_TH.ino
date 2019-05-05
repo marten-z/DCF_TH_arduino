@@ -8,6 +8,14 @@
 // Pin A4: SDA (for LCD I2C module)
 // Pin A5: SCL (for LCD I2C module)
 
+// Clock states:
+// useless  = 0, waiting for good enough signal
+// dirty    = 1, time data available but unreliable
+// free     = 2, clock was once synced but now may deviate more than 200 ms, must not re-lock if valid phase is detected
+// unlocked = 3, lock was once synced, inaccuracy below 200 ms, may re-lock if a valid phase is detected
+// locked   = 4, clock driven by accurate phase, time is accurate but not all decoder stages have sufficient quality for sync
+// synced   = 5  best possible quality, clock is 100% synced
+
 #include "DHT.h"
 #include <LiquidCrystal_I2C.h>
 #include <dcf77.h>
@@ -59,6 +67,8 @@ void setup()
 
   readAndPrintDht();
 
+  uint8_t minutes = 0;
+
   // Wait till clock is synced, depending on the signal quality this may take
   // rather long. About 5 minutes with a good signal, 30 minutes or longer
   // with a bad signal
@@ -75,12 +85,24 @@ void setup()
     sprint('.');
     ++count;
 
-    char * stateValue = clockStateEnumValue(state);
-    lcdPrintDate(stateValue);
+    lcd.setCursor(0,1);
+    lcd.print("st=");
+    lcd.setCursor(3,1);
+    lcd.print(state);
+    lcd.setCursor(4,1);
+    lcd.print(" m=");
+    lcd.setCursor(7,1);
+    if (minutes < 10) {
+      lcd.print("0");
+      lcd.setCursor(8,1);
+    }
+    lcd.print(minutes);
     
     if (count == 60) {
+      minutes++;
       count = 0;
       readAndPrintDht();
+      sprint(minutes);
       sprintln();
     }
   }
@@ -137,6 +159,11 @@ void serialPrintDcfSetupInfo() {
 }
 
 void lcdPrintDateTime(Clock::time_t now) {
+  lcdPrintTime(now);
+  lcdPrintDate(now);  
+}
+
+void lcdPrintTime(Clock::time_t now) {
   char time[8] = {
     now.hour.digit.hi,
     now.hour.digit.lo,
@@ -147,8 +174,12 @@ void lcdPrintDateTime(Clock::time_t now) {
     now.second.digit.hi,
     now.second.digit.lo
   };
-  lcdPrintTime(time);
+  
+  lcd.setCursor(0,0);
+  lcd.print(time);
+}
 
+void lcdPrintDate(Clock::time_t now) {
   char date[10] = {
     '2',
     '0',
@@ -161,23 +192,9 @@ void lcdPrintDateTime(Clock::time_t now) {
     now.day.digit.hi,
     now.day.digit.lo
   };
-  lcdPrintDate(date);  
-}
-
-void lcdPrintTime(char str) {
-  size_t prevlen = strlen(str);
-  memset(str + prevlen, ' ', 7 - prevlen);
-  
-  lcd.setCursor(0,0);
-  lcd.print(str);
-}
-
-void lcdPrintDate(char * str) {
-  size_t prevlen = strlen(str);
-  memset(str + prevlen, ' ', 9 - prevlen);
   
   lcd.setCursor(0,1);
-  lcd.print(str);
+  lcd.print(date);
 }
 
 void readAndPrintDht() {
@@ -211,32 +228,6 @@ void lcdPrintHumidity(float h) {
   }
   lcd.setCursor(11,1);
   lcd.print(str); lcd.print('%');
-}
-
-char * clockStateEnumValue(Clock::clock_state_t state) {
-  char * buf = (char *) malloc (8);
-  
-  switch (state) {
-      case Clock::useless:  // 0, waiting for good enough signal
-        strcpy(buf, "useless");
-        break;
-      case Clock::dirty:    // 1, time data available but unreliable
-        strcpy(buf, "dirty");
-        break;
-      case Clock::free:     // 2, clock was once synced but now may deviate more than 200 ms, must not re-lock if valid phase is detected
-        strcpy(buf, "free");
-        break;
-      case Clock::unlocked: // 3, lock was once synced, inaccuracy below 200 ms, may re-lock if a valid phase is detected
-        strcpy(buf, "unlocked");
-        break;
-      case Clock::locked:   // 4, clock driven by accurate phase, time is accurate but not all decoder stages have sufficient quality for sync
-        strcpy(buf, "locked");
-        break;
-      case Clock::synced:   // 5, best possible quality, clock is 100% synced
-        strcpy(buf, "synced");
-        break;
-   }
-   return buf;
 }
 
 void dcfSerialPrint(Clock::time_t now) {
