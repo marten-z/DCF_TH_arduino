@@ -58,14 +58,13 @@ void setup()
   lcd.setCursor(0,0);
   lcd.print("DCF init");
   lcd.setCursor(0,1);
-  lcd.print("DCF state");
+  lcd.print("st=0 m=0 ");
 
   serialPrintDcfSetupInfo();
+  readAndPrintDht();
 
   DCF77_Clock::setup();
   DCF77_Clock::set_input_provider(dcf_sample_input_pin);
-
-  readAndPrintDht();
 
   uint8_t minutes = 0;
 
@@ -84,26 +83,17 @@ void setup()
     static uint8_t count = 0;
     sprint('.');
     ++count;
-
-    lcd.setCursor(0,1);
-    lcd.print("st=");
-    lcd.setCursor(3,1);
-    lcd.print(state);
-    lcd.setCursor(4,1);
-    lcd.print(" m=");
-    lcd.setCursor(7,1);
-    if (minutes < 10) {
-      lcd.print("0");
-      lcd.setCursor(8,1);
-    }
-    lcd.print(minutes);
     
     if (count == 60) {
-      minutes++;
+      ++minutes;
       count = 0;
-      readAndPrintDht();
       sprint(minutes);
       sprintln();
+      
+      lcd.setCursor(3,1);
+      lcd.print(state);
+      lcd.setCursor(7,1);
+      lcd.print(minutes);
     }
   }
 }
@@ -125,12 +115,12 @@ void loop()
     dcfSerialPrint(now);
   }
     
-  static uint8_t count = 0;
-  ++count;
+  static uint8_t seconds = 0;
+  ++seconds;
   
   // Wait a few seconds between measurements.
-  if (count >= dhtDelayInSeconds) {    
-    count = 0;    
+  if (seconds >= dhtDelayInSeconds) {    
+    seconds = 0;    
     readAndPrintDht();
   }
 }
