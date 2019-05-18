@@ -156,6 +156,11 @@ void loop() {
         lcdPaddedPrint(now.month);
         lcd.print('-');
         lcdPaddedPrint(now.day);
+
+        // Wait a few seconds between measurements.
+        if (BCD::bcd_to_int(now.second) % dhtDelayInSeconds == 0) {
+            readAndPrintDht();
+        }
     }
 }
 
