@@ -139,6 +139,9 @@ void serialPrintDcfSetupInfo() {
     sprint(F("Inverted Mode:   ")); sprintln(dcf77_inverted_samples);
     sprint(F("Monitor Pin:     ")); sprintln(dcf77_monitor_led);
     sprintln();
+    sprint(F("DHT Sensor Pin:  ")); sprintln(DHTPIN);
+    sprint(F("DHT Sensor Type: ")); sprintln(DHTTYPE);
+    sprintln();
     sprintln(F("Clock states:"));
     sprintln(F("useless  = 0, waiting for good enough signal"));
     sprintln(F("dirty    = 1, time data available but unreliable"));
