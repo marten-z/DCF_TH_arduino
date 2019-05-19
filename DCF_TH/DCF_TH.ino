@@ -27,7 +27,6 @@ DHT dht(DHTPIN, DHTTYPE);
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 const uint8_t dhtDelayInSeconds = 5;
 
-
 // Pins and settings for DCF module
 const uint8_t dcf77_sample_pin = 9;
 const uint8_t dcf77_inverted_samples = 0;
@@ -41,14 +40,6 @@ const uint8_t dcf77_monitor_led = 13;  // A4 == d18
 #else
 #define printByte(args)  print(args,BYTE);
 #endif
-
-
-uint8_t dcf_sample_input_pin() {
-    const uint8_t sampled_data = dcf77_inverted_samples ^ digitalRead(dcf77_sample_pin);
-  
-    digitalWrite(dcf77_monitor_led, sampled_data);
-    return sampled_data;
-}
 
 
 void setup() {  
@@ -99,6 +90,7 @@ void setup() {
         if (count == 60) {
             ++minutes;
             count = 0;
+            
             sprint('-');
             sprint(minutes);
             sprintln();
@@ -115,64 +107,25 @@ void loop() {
     DCF77_Clock::get_current_time(now);
     
     if (now.month.val > 0) {
-        uint8_t state = DCF77_Clock::get_clock_state();
-        switch (state) {
-            case Clock::useless: sprint(F("useless ")); break;
-            case Clock::dirty:   sprint(F("dirty:  ")); break;
-            case Clock::synced:  sprint(F("synced: ")); break;
-            case Clock::locked:  sprint(F("locked: ")); break;
-        }
-        sprint(' ');
-    
-        sprint(F("20"));
-        paddedPrint(now.year);
-        sprint('-');
-        paddedPrint(now.month);
-        sprint('-');
-        paddedPrint(now.day);
-        sprint(' ');
-    
-        paddedPrint(now.hour);
-        sprint(':');
-        paddedPrint(now.minute);
-        sprint(':');
-        paddedPrint(now.second);
-    
-        sprint("+0");
-        sprint(now.uses_summertime? '2': '1');
-        sprintln();
-      
-        lcd.setCursor(0,0);
-        lcdPaddedPrint(now.hour);
-        lcd.print(':');
-        lcdPaddedPrint(now.minute);
-        lcd.print(':');
-        lcdPaddedPrint(now.second);
-        
-        lcd.setCursor(0,1);
-        lcd.print("20");
-        lcdPaddedPrint(now.year);
-        lcd.print('-');
-        lcdPaddedPrint(now.month);
-        lcd.print('-');
-        lcdPaddedPrint(now.day);
+        serialPrintDateTimeWithState(now);
+
+        lcdPrintTime(now);      
+        lcdPrintDate(now);        
 
         // Wait a few seconds between measurements.
-        if (BCD::bcd_to_int(now.second) % dhtDelayInSeconds == 0) {
-            readAndPrintDht();
-        }
+        // Disabled for now since it screws up the DCF logic, probably because it takes too much time
+//        if (BCD::bcd_to_int(now.second) % dhtDelayInSeconds == 0) {
+//            readAndPrintDht();
+//        }
     }
 }
 
 
-void lcdPaddedPrint(BCD::bcd_t n) {
-    lcd.print(n.digit.hi);
-    lcd.print(n.digit.lo);
-}
-
-void paddedPrint(BCD::bcd_t n) {
-    sprint(n.digit.hi);
-    sprint(n.digit.lo);
+uint8_t dcf_sample_input_pin() {
+    const uint8_t sampled_data = dcf77_inverted_samples ^ digitalRead(dcf77_sample_pin);
+  
+    digitalWrite(dcf77_monitor_led, sampled_data);
+    return sampled_data;
 }
 
 void serialPrintDcfSetupInfo() {
@@ -198,16 +151,64 @@ void serialPrintDcfSetupInfo() {
     sprintln(F("Initializing..."));
 }
 
-void lcdPrintState(const uint8_t state) {
-    lcd.setCursor(0,1);
-  
+void serialPrintDateTimeWithState(const Clock::time_t now) {
+    uint8_t state = DCF77_Clock::get_clock_state();
     switch (state) {
-        case Clock::useless: lcd.print("st=useless"); break;
-        case Clock::dirty:   lcd.print("st=dirty  "); break;
-        case Clock::synced:  lcd.print("st=synced "); break;
-        case Clock::locked:  lcd.print("st=locked "); break;
+        case Clock::useless: sprint(F("useless ")); break;
+        case Clock::dirty:   sprint(F("dirty:  ")); break;
+        case Clock::synced:  sprint(F("synced: ")); break;
+        case Clock::locked:  sprint(F("locked: ")); break;
     }
+    sprint(' ');
+
+    sprint(F("20"));
+    paddedPrint(now.year);
+    sprint('-');
+    paddedPrint(now.month);
+    sprint('-');
+    paddedPrint(now.day);
+    sprint(' ');
+
+    paddedPrint(now.hour);
+    sprint(':');
+    paddedPrint(now.minute);
+    sprint(':');
+    paddedPrint(now.second);
+
+    sprint("+0");
+    sprint(now.uses_summertime? '2': '1');
+    sprintln();
 }
+
+void lcdPrintTime(const Clock::time_t now) {
+    lcd.setCursor(0,0);
+    lcdPaddedPrint(now.hour);
+    lcd.print(':');
+    lcdPaddedPrint(now.minute);
+    lcd.print(':');
+    lcdPaddedPrint(now.second);
+}
+
+void lcdPrintDate(const Clock::time_t now) {
+    lcd.setCursor(0,1);
+    lcd.print("20");
+    lcdPaddedPrint(now.year);
+    lcd.print('-');
+    lcdPaddedPrint(now.month);
+    lcd.print('-');
+    lcdPaddedPrint(now.day);
+}
+
+//void lcdPrintState(const uint8_t state) {
+//    lcd.setCursor(0,1);
+//  
+//    switch (state) {
+//        case Clock::useless: lcd.print("st=useless"); break;
+//        case Clock::dirty:   lcd.print("st=dirty  "); break;
+//        case Clock::synced:  lcd.print("st=synced "); break;
+//        case Clock::locked:  lcd.print("st=locked "); break;
+//    }
+//}
 
 void readAndPrintDht() {
     // Reading temperature or humidity takes about 250 milliseconds!
@@ -240,4 +241,14 @@ void lcdPrintHumidity(const float h) {
     }
     lcd.setCursor(11,1);
     lcd.print(str); lcd.print('%');
+}
+
+void lcdPaddedPrint(const BCD::bcd_t n) {
+    lcd.print(n.digit.hi);
+    lcd.print(n.digit.lo);
+}
+
+void paddedPrint(const BCD::bcd_t n) {
+    sprint(n.digit.hi);
+    sprint(n.digit.lo);
 }
