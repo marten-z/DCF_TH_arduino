@@ -25,7 +25,6 @@
 
 DHT dht(DHTPIN, DHTTYPE);
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-const uint8_t dhtDelayInSeconds = 5;
 
 // Pins and settings for DCF module
 const uint8_t dcf77_sample_pin = 9;
@@ -33,6 +32,8 @@ const uint8_t dcf77_inverted_samples = 0;
 //const uint8_t dcf77_pin_mode = INPUT;  // disable internal pull up
 const uint8_t dcf77_pin_mode = INPUT_PULLUP;  // enable internal pull up
 const uint8_t dcf77_monitor_led = 13;  // A4 == d18
+
+const uint8_t dhtDelayInSeconds = 30;
 
 
 #if defined(ARDUINO) && ARDUINO >= 100
@@ -54,20 +55,21 @@ void setup() {
     
     lcd.init();
     dht.begin();
+
+    readAndPrintDht();
   
     lcd.backlight();
     lcd.setCursor(0,0);
-    lcd.print("DCF init");
+    lcd.print("DCF st=0");
     lcd.setCursor(0,1);
-    lcd.print("st=0 m=0 ");
+    lcd.print("m=0");
   
     DCF77_Clock::setup();
     DCF77_Clock::set_input_provider(dcf_sample_input_pin);
-    
-    readAndPrintDht();
-  
+
+    uint8_t lastState = 0;
     uint8_t minutes = 0;
-    uint8_t count = 0;
+    uint8_t seconds = 0;
   
     // Wait till clock is synced, depending on the signal quality this may take
     // rather long. About 5 minutes with a good signal, 30 minutes or longer
@@ -80,22 +82,24 @@ void setup() {
         Clock::time_t now;
         DCF77_Clock::get_current_time(now);
     
-        // render one dot per second while initializing
-        sprint(state);      
-        lcd.setCursor(3,1);
-        lcd.print(state);
+        // render one char per second while initializing
+        sprint(state);
+        if (state != lastState) {
+            lcd.setCursor(7,0);
+            lcd.print(state);
+        }
         
-        ++count;
+        ++seconds;
         
-        if (count == 60) {
+        if (seconds == 60) {
             ++minutes;
-            count = 0;
+            seconds = 0;
             
-            sprint('-');
+            sprint(" - m=");
             sprint(minutes);
             sprintln();
-            
-            lcd.setCursor(7,1);
+
+            lcd.setCursor(2,1);
             lcd.print(minutes);
         }
     }
@@ -110,14 +114,14 @@ void loop() {
         serialPrintDateTimeWithState(now);
 
         lcdPrintTime(now);      
-        lcdPrintDate(now);        
-
-        // Wait a few seconds between measurements.
-        // Disabled for now since it screws up the DCF logic, probably because it takes too much time
-//        if (BCD::bcd_to_int(now.second) % dhtDelayInSeconds == 0) {
-//            readAndPrintDht();
-//        }
+        lcdPrintDate(now);
     }
+
+    // Do a measurement every x seconds
+//    if (count >= dhtDelayInSeconds) {
+//        if (BCD::bcd_to_int(now.second) % dhtDelayInSeconds == 0) {
+//        readAndPrintDht();
+//    }
 }
 
 
@@ -213,7 +217,7 @@ void lcdPrintDate(const Clock::time_t now) {
 //    }
 //}
 
-void readAndPrintDht() {
+void readAndPrintDht() {  
     // Reading temperature or humidity takes about 250 milliseconds!
     // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
     float h = dht.readHumidity();
@@ -227,7 +231,10 @@ void readAndPrintDht() {
 void lcdPrintTemp(const float t) {
     char str[4];
     if (isnan(t)) {
-        strcat(str, " ERR");
+//        strcat(str, " ERR");
+        sprint("Error reading temperature: ");
+        sprint(t);
+        sprintln();
     } else {
         dtostrf(t, 4, 1, str);
     }
@@ -238,7 +245,10 @@ void lcdPrintTemp(const float t) {
 void lcdPrintHumidity(const float h) {
     char str[4];
     if (isnan(h)) {
-        strcat(str, " ERR");
+//        strcat(str, " ERR");
+        sprint("Error reading humidity: ");
+        sprint(h);
+        sprintln();
     } else {
         dtostrf(h, 4, 1, str);
     }
