@@ -68,7 +68,7 @@ void setup() {
     DCF77_Clock::set_input_provider(dcf_sample_input_pin);
 
     uint8_t lastState = 0;
-    uint8_t minutes = 0;
+    uint16_t minutes = 0;
     uint8_t seconds = 0;
   
     // Wait till clock is synced, depending on the signal quality this may take
