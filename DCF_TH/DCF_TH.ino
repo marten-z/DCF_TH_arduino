@@ -122,6 +122,8 @@ void setup() {
             sprint(state);
             sprintln();
 
+            readAndPrintDht();
+
             lcd.setCursor(7,0);
             lcd.print(state);
 
