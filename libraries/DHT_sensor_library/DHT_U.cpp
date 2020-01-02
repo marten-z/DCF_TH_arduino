@@ -120,7 +120,7 @@ bool DHT_Unified::Temperature::getEvent(sensors_event_t* event) {
   event->sensor_id   = _id;
   event->type        = SENSOR_TYPE_AMBIENT_TEMPERATURE;
   event->timestamp   = millis();
-  event->temperature = _parent->_dht.readTemperature();
+  event->temperature = _parent->_dht.readTemperature(false, true);
   
   return true;
 }
