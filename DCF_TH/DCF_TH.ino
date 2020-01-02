@@ -16,14 +16,17 @@
 // locked   = 4, clock driven by accurate phase, time is accurate but not all decoder stages have sufficient quality for sync
 // synced   = 5  best possible quality, clock is 100% synced
 
-#include "DHT.h"
 #include <LiquidCrystal_I2C.h>
 #include <dcf77.h>
+
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#include <DHT_U.h>
 
 #define DHTPIN 10       // Pin where the DHT sensor is connected to
 #define DHTTYPE DHT22   // DHT22 (AM2302)
 
-DHT dht(DHTPIN, DHTTYPE);
+DHT_Unified dht(DHTPIN, DHTTYPE);
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // Pins and settings for DCF module
@@ -33,7 +36,7 @@ const uint8_t dcf77_inverted_samples = 0;
 const uint8_t dcf77_pin_mode = INPUT_PULLUP;  // enable internal pull up
 const uint8_t dcf77_monitor_led = 13;  // A4 == d18
 
-const uint8_t dhtDelayInSeconds = 30;
+const uint8_t dhtDelayInSeconds = 20;
 
 
 #if defined(ARDUINO) && ARDUINO >= 100
@@ -53,21 +56,43 @@ void setup() {
     pinMode(dcf77_monitor_led, OUTPUT);
     pinMode(dcf77_sample_pin, dcf77_pin_mode);
     
-    lcd.init();
-    dht.begin();
-
-    readAndPrintDht();
-  
+    lcd.init();  
     lcd.backlight();
     lcd.setCursor(0,0);
     lcd.print("DCF st=0");
     lcd.setCursor(0,1);
     lcd.print("m=0");
+    
+    dht.begin();
+
+    // Print temperature sensor details.
+    sensor_t sensor;
+    dht.temperature().getSensor(&sensor);
+    Serial.println(F("------------------------------------"));
+    Serial.println(F("Temperature Sensor"));
+    Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
+    Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
+    Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
+    Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("°C"));
+    Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("°C"));
+    Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("°C"));
+    Serial.println(F("------------------------------------"));
+    // Print humidity sensor details.
+    dht.humidity().getSensor(&sensor);
+    Serial.println(F("Humidity Sensor"));
+    Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
+    Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
+    Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
+    Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("%"));
+    Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("%"));
+    Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("%"));
+    Serial.println(F("------------------------------------"));
+    
+    readAndPrintDht();
   
     DCF77_Clock::setup();
     DCF77_Clock::set_input_provider(dcf_sample_input_pin);
 
-    uint8_t lastState = 0;
     uint16_t minutes = 0;
     uint8_t seconds = 0;
   
@@ -84,10 +109,6 @@ void setup() {
     
         // render one char per second while initializing
         sprint(state);
-        if (state != lastState) {
-            lcd.setCursor(7,0);
-            lcd.print(state);
-        }
         
         ++seconds;
         
@@ -97,7 +118,12 @@ void setup() {
             
             sprint(" - m=");
             sprint(minutes);
+            sprint(", s=");
+            sprint(state);
             sprintln();
+
+            lcd.setCursor(7,0);
+            lcd.print(state);
 
             lcd.setCursor(2,1);
             lcd.print(minutes);
@@ -115,13 +141,12 @@ void loop() {
 
         lcdPrintTime(now);      
         lcdPrintDate(now);
-    }
 
-    // Do a measurement every x seconds
-//    if (count >= dhtDelayInSeconds) {
-//        if (BCD::bcd_to_int(now.second) % dhtDelayInSeconds == 0) {
-//        readAndPrintDht();
-//    }
+        // Do a measurement every x seconds
+        if (BCD::bcd_to_int(now.second) % dhtDelayInSeconds == 0) {
+            readAndPrintDht();
+        }
+    }
 }
 
 
@@ -183,7 +208,7 @@ void serialPrintDateTimeWithState(const Clock::time_t now) {
     paddedPrint(now.second);
 
     sprint("+0");
-    sprint(now.uses_summertime? '2': '1');
+    sprint(now.uses_summertime ? '2' : '1');
     sprintln();
 }
 
@@ -217,21 +242,35 @@ void lcdPrintDate(const Clock::time_t now) {
 //    }
 //}
 
-void readAndPrintDht() {  
-    // Reading temperature or humidity takes about 250 milliseconds!
-    // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-    float h = dht.readHumidity();
-    // Read temperature as Celsius
-    float t = dht.readTemperature();
-  
-    lcdPrintTemp(t);
-    lcdPrintHumidity(h);
+void readAndPrintDht() {
+    sensors_event_t event;
+    dht.temperature().getEvent(&event);
+    if (isnan(event.temperature)) {
+      Serial.println(F("Error reading temperature!"));
+    }
+    else {
+      Serial.print(F("Temperature: "));
+      Serial.print(event.temperature);
+      Serial.println(F("°C"));
+      lcdPrintTemp(event.temperature);
+    }
+    // Get humidity event and print its value.
+    dht.humidity().getEvent(&event);
+    if (isnan(event.relative_humidity)) {
+      Serial.println(F("Error reading humidity!"));
+    }
+    else {
+      Serial.print(F("Humidity: "));
+      Serial.print(event.relative_humidity);
+      Serial.println(F("%"));
+      lcdPrintHumidity(event.relative_humidity);
+    }
 }
 
 void lcdPrintTemp(const float t) {
     char str[4];
     if (isnan(t)) {
-//        strcat(str, " ERR");
+        strcat(str, " ERR");
         sprint("Error reading temperature: ");
         sprint(t);
         sprintln();
@@ -245,7 +284,7 @@ void lcdPrintTemp(const float t) {
 void lcdPrintHumidity(const float h) {
     char str[4];
     if (isnan(h)) {
-//        strcat(str, " ERR");
+        strcat(str, " ERR");
         sprint("Error reading humidity: ");
         sprint(h);
         sprintln();
