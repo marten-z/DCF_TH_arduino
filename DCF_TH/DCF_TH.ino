@@ -49,10 +49,7 @@ const uint8_t dhtDelayInSeconds = 20;
 void setup() {  
     using namespace Clock;
     
-    Serial.begin(9600);
-  
-    serialPrintDcfSetupInfo();
-    
+    Serial.begin(9600);    
     pinMode(dcf77_monitor_led, OUTPUT);
     pinMode(dcf77_sample_pin, dcf77_pin_mode);
     
@@ -62,37 +59,17 @@ void setup() {
     lcd.print("DCF st=0");
     lcd.setCursor(0,1);
     lcd.print("m=0");
+  
+    serialPrintDcfSetupInfo();
+    serialPrintDhtSensorInfo();
     
     dht.begin();
-
-    // Print temperature sensor details.
-    sensor_t sensor;
-    dht.temperature().getSensor(&sensor);
-    Serial.println(F("------------------------------------"));
-    Serial.println(F("Temperature Sensor"));
-    Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
-    Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
-    Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
-    Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("°C"));
-    Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("°C"));
-    Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("°C"));
-    Serial.println(F("------------------------------------"));
-    // Print humidity sensor details.
-    dht.humidity().getSensor(&sensor);
-    Serial.println(F("Humidity Sensor"));
-    Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
-    Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
-    Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
-    Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("%"));
-    Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("%"));
-    Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("%"));
-    Serial.println(F("------------------------------------"));
-    
     readAndPrintDht();
   
     DCF77_Clock::setup();
     DCF77_Clock::set_input_provider(dcf_sample_input_pin);
 
+    Clock::time_t now;
     uint16_t minutes = 0;
     uint8_t seconds = 0;
   
@@ -104,7 +81,6 @@ void setup() {
         state = DCF77_Clock::get_clock_state()) {
     
         // wait for next sec
-        Clock::time_t now;
         DCF77_Clock::get_current_time(now);
     
         // render one char per second while initializing
@@ -179,38 +155,49 @@ void serialPrintDcfSetupInfo() {
     sprintln(F("free     = 2, clock was once synced but now may deviate more than 200 ms, must not re-lock if valid phase is detected"));
     sprintln(F("unlocked = 3, lock was once synced, inaccuracy below 200 ms, may re-lock if a valid phase is detected"));
     sprintln(F("locked   = 4, clock driven by accurate phase, time is accurate but not all decoder stages have sufficient quality for sync"));
-    sprintln(F("synced   = 5  best possible quality, clock is 100% synced"));
+    sprintln(F("synced   = 5, best possible quality, clock is 100% synced"));
     sprintln();
-    sprintln();
-    sprintln(F("Initializing..."));
+}
+
+void serialPrintDhtSensorInfo() {
+  sensor_t sensor;
+  
+  // Print temperature sensor details.
+  dht.temperature().getSensor(&sensor);
+  Serial.println(F("------------------------------------"));
+  Serial.println(F("Temperature Sensor"));
+  Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
+  Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
+  Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
+  Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("°C"));
+  Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("°C"));
+  Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("°C"));
+  Serial.println(F("------------------------------------"));
+  
+  // Print humidity sensor details.
+  dht.humidity().getSensor(&sensor);
+  Serial.println(F("Humidity Sensor"));
+  Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
+  Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
+  Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
+  Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("%"));
+  Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("%"));
+  Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("%"));
+  Serial.println(F("------------------------------------"));
 }
 
 void serialPrintDateTimeWithState(const Clock::time_t now) {
     uint8_t state = DCF77_Clock::get_clock_state();
     switch (state) {
-        case Clock::useless: sprint(F("useless ")); break;
-        case Clock::dirty:   sprint(F("dirty:  ")); break;
-        case Clock::synced:  sprint(F("synced: ")); break;
-        case Clock::locked:  sprint(F("locked: ")); break;
+      case Clock::useless: sprint(F("useless ")); break;
+      case Clock::dirty:   sprint(F("dirty:  ")); break;
+      case Clock::synced:  sprint(F("synced: ")); break;
+      case Clock::locked:  sprint(F("locked: ")); break;
     }
     sprint(' ');
 
     sprint(F("20"));
-    paddedPrint(now.year);
-    sprint('-');
-    paddedPrint(now.month);
-    sprint('-');
-    paddedPrint(now.day);
-    sprint(' ');
-
-    paddedPrint(now.hour);
-    sprint(':');
-    paddedPrint(now.minute);
-    sprint(':');
-    paddedPrint(now.second);
-
-    sprint("+0");
-    sprint(now.uses_summertime ? '2' : '1');
+    DCF77_Clock::print(now);
     sprintln();
 }
 
@@ -300,9 +287,4 @@ void lcdPrintHumidity(const float h) {
 void lcdPaddedPrint(const BCD::bcd_t n) {
     lcd.print(n.digit.hi);
     lcd.print(n.digit.lo);
-}
-
-void paddedPrint(const BCD::bcd_t n) {
-    sprint(n.digit.hi);
-    sprint(n.digit.lo);
 }
