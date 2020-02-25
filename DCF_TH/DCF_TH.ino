@@ -14,7 +14,7 @@
 // free     = 2, clock was once synced but now may deviate more than 200 ms, must not re-lock if valid phase is detected
 // unlocked = 3, lock was once synced, inaccuracy below 200 ms, may re-lock if a valid phase is detected
 // locked   = 4, clock driven by accurate phase, time is accurate but not all decoder stages have sufficient quality for sync
-// synced   = 5  best possible quality, clock is 100% synced
+// synced   = 5, best possible quality, clock is 100% synced
 
 #include <LiquidCrystal_I2C.h>
 #include <dcf77.h>
@@ -36,7 +36,10 @@ const uint8_t dcf77_inverted_samples = 0;
 const uint8_t dcf77_pin_mode = INPUT_PULLUP;  // enable internal pull up
 const uint8_t dcf77_monitor_led = 13;  // A4 == d18
 
+const uint8_t dcfStateDelayInSeconds = 10;
 const uint8_t dhtDelayInSeconds = 20;
+
+bool showDateToggle = true;
 
 
 #if defined(ARDUINO) && ARDUINO >= 100
@@ -117,11 +120,21 @@ void loop() {
     if (now.month.val > 0) {
         serialPrintDateTimeWithState(now);
 
-        lcdPrintTime(now);      
-        lcdPrintDate(now);
+        lcdPrintTime(now);
+        
+        uint8_t second = BCD::bcd_to_int(now.second);
+        if (second % dcfStateDelayInSeconds == 0) {
+            showDateToggle = !showDateToggle;
+        }
+
+        if (showDateToggle) {
+            lcdPrintDate(now);
+        } else {
+            lcdPrintState(DCF77_Clock::get_clock_state());
+        }
 
         // Do a measurement every x seconds
-        if (BCD::bcd_to_int(now.second) % dhtDelayInSeconds == 0) {
+        if (second % dhtDelayInSeconds == 0) {
             readAndPrintDht();
         }
     }
@@ -160,39 +173,41 @@ void serialPrintDcfSetupInfo() {
 }
 
 void serialPrintDhtSensorInfo() {
-  sensor_t sensor;
-  
-  // Print temperature sensor details.
-  dht.temperature().getSensor(&sensor);
-  Serial.println(F("------------------------------------"));
-  Serial.println(F("Temperature Sensor"));
-  Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
-  Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
-  Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
-  Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("°C"));
-  Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("°C"));
-  Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("°C"));
-  Serial.println(F("------------------------------------"));
-  
-  // Print humidity sensor details.
-  dht.humidity().getSensor(&sensor);
-  Serial.println(F("Humidity Sensor"));
-  Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
-  Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
-  Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
-  Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("%"));
-  Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("%"));
-  Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("%"));
-  Serial.println(F("------------------------------------"));
+    sensor_t sensor;
+    
+    // Print temperature sensor details.
+    dht.temperature().getSensor(&sensor);
+    Serial.println(F("------------------------------------"));
+    Serial.println(F("Temperature Sensor"));
+    Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
+    Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
+    Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
+    Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("°C"));
+    Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("°C"));
+    Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("°C"));
+    Serial.println(F("------------------------------------"));
+    
+    // Print humidity sensor details.
+    dht.humidity().getSensor(&sensor);
+    Serial.println(F("Humidity Sensor"));
+    Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
+    Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
+    Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
+    Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("%"));
+    Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("%"));
+    Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("%"));
+    Serial.println(F("------------------------------------"));
 }
 
 void serialPrintDateTimeWithState(const Clock::time_t now) {
     uint8_t state = DCF77_Clock::get_clock_state();
     switch (state) {
-      case Clock::useless: sprint(F("useless ")); break;
-      case Clock::dirty:   sprint(F("dirty:  ")); break;
-      case Clock::synced:  sprint(F("synced: ")); break;
-      case Clock::locked:  sprint(F("locked: ")); break;
+      case Clock::useless:  sprint(F("st=0, useless:  ")); break;
+      case Clock::dirty:    sprint(F("st=1, dirty:    ")); break;
+      case Clock::free:     sprint(F("st=2, free:     ")); break;
+      case Clock::unlocked: sprint(F("st=3, unlocked: ")); break;
+      case Clock::locked:   sprint(F("st=4, locked:   ")); break;
+      case Clock::synced:   sprint(F("st=5, synced:   ")); break;
     }
     sprint(' ');
 
@@ -220,16 +235,18 @@ void lcdPrintDate(const Clock::time_t now) {
     lcdPaddedPrint(now.day);
 }
 
-//void lcdPrintState(const uint8_t state) {
-//    lcd.setCursor(0,1);
-//  
-//    switch (state) {
-//        case Clock::useless: lcd.print("st=useless"); break;
-//        case Clock::dirty:   lcd.print("st=dirty  "); break;
-//        case Clock::synced:  lcd.print("st=synced "); break;
-//        case Clock::locked:  lcd.print("st=locked "); break;
-//    }
-//}
+void lcdPrintState(const uint8_t state) {
+    lcd.setCursor(0,1);
+  
+    switch (state) {
+        case Clock::useless:  lcd.print("0, useless"); break;
+        case Clock::dirty:    lcd.print("1, dirty  "); break;
+        case Clock::free:     lcd.print("2, free   "); break;
+        case Clock::unlocked: lcd.print("3, unlockd"); break;
+        case Clock::locked:   lcd.print("4, locked "); break;
+        case Clock::synced:   lcd.print("5, synced "); break;
+    }
+}
 
 void readAndPrintDht() {
     sensors_event_t event;
